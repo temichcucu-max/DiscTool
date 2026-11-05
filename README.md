@@ -123,14 +123,14 @@ DiscTool/
 ├── vcpkg.json              # пустой манифест на будущее
 ├── include/disktool/core/  # публичные заголовки core (version.h, scanner.h)
 ├── src/core/               # disktool_core — статическая библиотека без Qt
-├── src/app/                # disktool — Qt Widgets приложение
+├── src/app/                # disktool — Qt Widgets (tabs/, models/)
 ├── resources/              # .qrc (пока пустой)
 └── tests/                  # тесты Catch2 для core
 ```
 
 `disktool_core` не зависит от Qt — это чистое C++-ядро (сканер файлов),
 которое используется приложением и тестами.
-Сканер синхронный, без потоков; параллелизм и отмена — отдельная задача, когда появится UI.
+Сканер синхронный, без внутренних потоков; UI запускает его через QtConcurrent, а отмена работает через `cancelToken`.
 
 ## Лицензия
 

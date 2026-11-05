@@ -39,9 +39,22 @@ ScanResult Scanner::scan(const fs::path& root) const
     const auto started = std::chrono::steady_clock::now();
 
     ScanResult result;
-    const auto finish = [&result, started] {
+
+    const auto notifyProgress = [this, &result] {
+        if (!m_options.onProgress) {
+            return;
+        }
+        try {
+            m_options.onProgress(result.totalFiles, result.totalDirectories);
+        } catch (...) {
+            // A progress callback must never break the scan.
+        }
+    };
+
+    const auto finish = [&result, started, &notifyProgress] {
         result.duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - started);
+        notifyProgress();
     };
 
     std::error_code rootError;
@@ -107,8 +120,17 @@ ScanResult Scanner::scan(const fs::path& root) const
         return true;
     };
 
+    std::uintmax_t processed = 0;
+    bool cancelled = false;
+
     try {
         while (it != end) {
+            if (m_options.cancelToken != nullptr && processed % 256 == 0
+                && m_options.cancelToken->load()) {
+                cancelled = true;
+                break;
+            }
+
             const auto current = it->path();
             const auto depth = static_cast<std::uintmax_t>(it.depth()) + 1;
 
@@ -184,6 +206,11 @@ ScanResult Scanner::scan(const fs::path& root) const
 
             result.entries.push_back(std::move(entry));
 
+            ++processed;
+            if (processed % 1000 == 0) {
+                notifyProgress();
+            }
+
             if (depth >= m_options.maxDepth) {
                 it.disable_recursion_pending();
             }
@@ -199,6 +226,10 @@ ScanResult Scanner::scan(const fs::path& root) const
         result.errors.push_back(toUtf8(root) + ": " + exception.what());
     } catch (...) {
         result.errors.push_back(toUtf8(root) + ": unknown error");
+    }
+
+    if (cancelled) {
+        result.errors.push_back(toUtf8(root) + ": cancelled by user");
     }
 
     finish();

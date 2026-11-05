@@ -2,6 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -71,7 +72,18 @@ std::string utf8(const char8_t* text)
     return reinterpret_cast<const char*>(text);
 }
 
-bool isValidUtf8(const std::string& text)
+void writeManyFiles(const fs::path& root, int count)
+{
+    fs::create_directories(root);
+    for (int index = 0; index < count; ++index) {
+        std::ofstream stream(root / ("file_" + std::to_string(index) + ".dat"),
+                             std::ios::binary);
+        stream << 'x';
+        if (!stream) {
+            throw std::runtime_error("failed to create test files");
+        }
+    }
+}bool isValidUtf8(const std::string& text)
 {
     std::size_t index = 0;
     while (index < text.size()) {
@@ -364,4 +376,57 @@ TEST_CASE("Scanner detects directory cycles when following links", "[scanner]")
     // so only "sub" is counted as a directory.
     CHECK(result.totalDirectories == 1);
 }
+
+TEST_CASE("Scanner stops early when the cancel token is set", "[scanner]")
+{
+    TempDir temp;
+    const auto root = temp.path() / "root";
+    writeManyFiles(root, 5000);
+
+    std::atomic_bool cancel{true};
+    ScanOptions options;
+    options.cancelToken = &cancel;
+
+    const auto result = Scanner(options).scan(root);
+
+    constexpr std::uintmax_t expectedMaximum = 5000;
+
+    bool hasCancelError = false;
+    for (const auto& message : result.errors) {
+        if (message.find("cancelled by user") != std::string::npos) {
+            hasCancelError = true;
+            break;
+        }
+    }
+
+    CHECK(hasCancelError);
+    CHECK(result.totalFiles < expectedMaximum);
+    CHECK(result.entries.size() < expectedMaximum);
+}
+
+TEST_CASE("Scanner invokes the progress callback", "[scanner]")
+{
+    TempDir temp;
+    const auto root = temp.path() / "root";
+    writeManyFiles(root, 1100);
+
+    std::uintmax_t calls = 0;
+    std::uintmax_t lastFiles = 0;
+    std::uintmax_t lastDirs = 0;
+
+    ScanOptions options;
+    options.onProgress = [&](std::uintmax_t files, std::uintmax_t dirs) {
+        ++calls;
+        lastFiles = files;
+        lastDirs = dirs;
+    };
+
+    const auto result = Scanner(options).scan(root);
+
+    // One periodic report around 1000 entries plus the final one.
+    CHECK(calls >= std::uintmax_t{2});
+    CHECK(lastFiles == result.totalFiles);
+    CHECK(lastDirs == result.totalDirectories);
+}
+
 

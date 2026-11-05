@@ -20,7 +20,7 @@ GPL, AGPL, LGPL (other than Qt), and proprietary SDKs are not permitted.
 - **Repository:** <https://www.qt.io> / <https://code.qt.io/cgit/qt/>
 - **License text in project:** not bundled; see
   <https://www.gnu.org/licenses/lgpl-3.0.html>
-- **Used modules:** Qt6::Core, Qt6::Gui, Qt6::Widgets
+- **Used modules:** Qt6::Core, Qt6::Gui, Qt6::Widgets, Qt6::Concurrent
 - **Notes:** linked dynamically. The exact version is resolved by
   `find_package(Qt6 REQUIRED COMPONENTS Widgets)` in `src/app/CMakeLists.txt`
   and is not pinned by the project. Static Qt linking is not used.

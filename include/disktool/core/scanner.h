@@ -1,8 +1,10 @@
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <string>
 #include <vector>
@@ -37,6 +39,17 @@ struct ScanOptions {
     /// Maximum entry depth. Direct children of the root have depth 1,
     /// maxDepth == 0 returns an empty result (after validating the root).
     std::uintmax_t maxDepth = std::numeric_limits<std::uintmax_t>::max();
+
+    /// If not nullptr, the scanner checks this flag in its loop and stops
+    /// early when it is true. The returned ScanResult contains the entries
+    /// collected so far and an error "cancelled by user".
+    std::atomic_bool* cancelToken = nullptr;
+
+    /// Called from the scanner thread periodically (roughly every 1000
+    /// entries) and once at the end, including cancellation and errors.
+    /// files/dirs are the counters accumulated so far. May be nullptr.
+    /// Must not throw; exceptions are swallowed by the scanner.
+    std::function<void(std::uintmax_t files, std::uintmax_t dirs)> onProgress;
 };
 
 struct ScanResult {

@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
@@ -8,12 +8,23 @@ add_executable(disktool
     main.cpp
     MainWindow.cpp
     MainWindow.h
+    FormatUtils.h
+    models/FileTableModel.cpp
+    models/FileTableModel.h
+    tabs/SearchTab.cpp
+    tabs/SearchTab.h
     ${PROJECT_SOURCE_DIR}/resources/resources.qrc
+)
+
+target_include_directories(disktool
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 target_link_libraries(disktool
     PRIVATE
         Qt6::Widgets
+        Qt6::Concurrent
         disktool_core
         disktool_warnings
 )
