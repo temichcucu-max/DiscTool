@@ -15,6 +15,7 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
 
 private:
+    void createMenus();
     void updateScanProgress(qulonglong files, qulonglong dirs);
     void updateScanSummary(qulonglong files, qulonglong dirs, qulonglong bytes,
                            qlonglong durationMs, int errorCount, bool cancelled);

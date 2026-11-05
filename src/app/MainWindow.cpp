@@ -1,18 +1,25 @@
 #include "MainWindow.h"
 
 #include "FormatUtils.h"
+#include "Theme.h"
 #include "disktool/core/version.h"
 #include "tabs/AnalysisTab.h"
 #include "tabs/CleanupTab.h"
 #include "tabs/SearchTab.h"
 
+#include <QActionGroup>
 #include <QIcon>
 #include <QLocale>
+#include <QMenu>
+#include <QMenuBar>
 #include <QPushButton>
 #include <QStatusBar>
 #include <QString>
 #include <QTabWidget>
 #include <QWidget>
+
+using disktool::app::Theme;
+using disktool::app::ThemeMode;
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -51,6 +58,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_searchTab->setAdminPrivileges(isAdmin);
 
     setCentralWidget(tabs);
+
+    createMenus();
 
     m_errorsButton = new QPushButton(tr("Ошибки"), this);
     m_errorsButton->setFlat(true);
@@ -98,6 +107,30 @@ MainWindow::MainWindow(QWidget* parent)
     // Version comes from the core library, proving app <-> core linkage.
     setWindowTitle(tr("DiscTool %1").arg(QString::fromUtf8(disktool::core::coreVersion())));
     resize(960, 640);
+}
+
+void MainWindow::createMenus()
+{
+    auto* viewMenu = menuBar()->addMenu(tr("Вид"));
+    auto* themeMenu = viewMenu->addMenu(tr("Тема"));
+
+    auto* group = new QActionGroup(this);
+    group->setExclusive(true);
+
+    const auto addTheme = [this, group, themeMenu](const QString& text,
+                                                    ThemeMode mode) {
+        auto* action = themeMenu->addAction(text);
+        action->setCheckable(true);
+        action->setChecked(Theme::instance().mode() == mode);
+        group->addAction(action);
+        connect(action, &QAction::triggered, this, [mode] {
+            Theme::instance().setMode(mode);
+        });
+    };
+
+    addTheme(tr("Системная"), ThemeMode::System);
+    addTheme(tr("Светлая"), ThemeMode::Light);
+    addTheme(tr("Темная"), ThemeMode::Dark);
 }
 
 void MainWindow::updateScanProgress(qulonglong files, qulonglong dirs)

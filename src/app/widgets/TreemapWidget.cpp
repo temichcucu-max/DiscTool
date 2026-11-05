@@ -1,6 +1,7 @@
 #include "widgets/TreemapWidget.h"
 
 #include "FormatUtils.h"
+#include "Theme.h"
 
 #include <QColor>
 #include <QEvent>
@@ -16,6 +17,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+using disktool::app::Theme;
+using disktool::app::ThemeMode;
 
 namespace fs = std::filesystem;
 
@@ -54,6 +58,9 @@ TreemapWidget::TreemapWidget(QWidget* parent)
     setMinimumSize(100, 100);
     setMouseTracking(true);
     setAutoFillBackground(false);
+
+    connect(&Theme::instance(), &Theme::changed, this,
+            [this](ThemeMode) { update(); });
 }
 
 void TreemapWidget::setCurrent(const disktool::core::DirNode* node)
@@ -79,7 +86,8 @@ void TreemapWidget::paintEvent(QPaintEvent* event)
     Q_UNUSED(event);
 
     QPainter painter(this);
-    painter.fillRect(rect(), QColor(245, 245, 245));
+    const bool dark = Theme::instance().isDark();
+    painter.fillRect(rect(), dark ? QColor(30, 30, 30) : QColor(245, 245, 245));
 
     ensureLayout();
 
@@ -104,15 +112,18 @@ void TreemapWidget::paintEvent(QPaintEvent* event)
         }
 
         const QRectF area(rect.x, rect.y, rect.w, rect.h);
+        // Darker tiles need lower value/saturation so they do not glow
+        // against the dark canvas; text flips to near-white.
         const QColor fill = QColor::fromHsv(
-            static_cast<int>(hashName(item.node->name) % 360u), 180, 220);
+            static_cast<int>(hashName(item.node->name) % 360u),
+            dark ? 150 : 180, dark ? 160 : 220);
 
         painter.fillRect(area, fill);
-        painter.setPen(QColor(55, 55, 55));
+        painter.setPen(dark ? QColor(15, 15, 15) : QColor(55, 55, 55));
         painter.drawRect(area);
 
         if (area.width() >= 60.0 && area.height() >= 20.0) {
-            painter.setPen(QColor(20, 20, 20));
+            painter.setPen(dark ? QColor(245, 245, 245) : QColor(20, 20, 20));
             const int availableWidth =
                 std::max(0, static_cast<int>(area.width()) - 6);
             const QString name = nameToQString(item.node->name);
@@ -241,7 +252,8 @@ void TreemapWidget::rebuildLayout()
 
 void TreemapWidget::drawMessage(QPainter& painter, const QString& text)
 {
-    painter.setPen(QColor(110, 110, 110));
+    painter.setPen(Theme::instance().isDark() ? QColor(160, 160, 160)
+                                              : QColor(110, 110, 110));
     painter.drawText(rect(), Qt::AlignCenter, text);
 }
 

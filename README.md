@@ -28,6 +28,9 @@
   (всегда использует обычный сканер, чтобы размеры были точными).
 - **«Очистка»** — поиск пустых файлов и папок с безопасным удалением
   в Корзину Windows (без `std::filesystem::remove`/`remove_all`).
+- **Темы оформления** — «Вид → Тема»: системная, светлая или темная. Выбор
+  сохраняется в `settings.ini` (`QStandardPaths::AppConfigLocation`) и
+  применяется при следующем запуске.
 
 ## Сборка из исходников
 
@@ -168,6 +171,8 @@ DiscTool/
 │       ├── MainWindow.cpp
 │       ├── FormatUtils.h
 │       ├── ScanJob.h           # выбор MFT / обычного сканера в фоне
+│       ├── Theme.h
+│       ├── Theme.cpp           # светлая/темная/системная тема + QSettings
 │       ├── models/
 │       │   ├── DirTreeModel.h
 │       │   ├── DirTreeModel.cpp

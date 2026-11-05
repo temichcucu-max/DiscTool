@@ -10,6 +10,8 @@ add_executable(disktool
     MainWindow.h
     FormatUtils.h
     ScanJob.h
+    Theme.cpp
+    Theme.h
     models/DirTreeModel.cpp
     models/DirTreeModel.h
     models/FileTableModel.cpp
