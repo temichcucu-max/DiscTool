@@ -1,6 +1,6 @@
 #pragma once
 
-#include "disktool/core/scanner.h"
+#include "ScanJob.h"
 
 #include <QFutureWatcher>
 #include <QWidget>
@@ -24,6 +24,7 @@ public:
     explicit SearchTab(QWidget* parent = nullptr);
     ~SearchTab() override;
 
+    void setAdminPrivileges(bool isAdmin);
     void showErrorsDialog();
 
 signals:
@@ -43,11 +44,13 @@ private:
     QPushButton* m_browseButton = nullptr;
     QPushButton* m_scanButton = nullptr;
     QCheckBox* m_includeHidden = nullptr;
+    QCheckBox* m_useMft = nullptr;
     QTableView* m_table = nullptr;
     FileTableModel* m_model = nullptr;
     QSortFilterProxyModel* m_proxy = nullptr;
 
-    QFutureWatcher<disktool::core::ScanResult> m_watcher;
+    QFutureWatcher<disktool::app::ScanJobResult> m_watcher;
     std::atomic_bool m_cancelFlag{false};
     std::vector<std::string> m_lastErrors;
+    bool m_isAdmin = false;
 };

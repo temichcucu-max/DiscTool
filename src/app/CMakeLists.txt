@@ -9,6 +9,7 @@ add_executable(disktool
     MainWindow.cpp
     MainWindow.h
     FormatUtils.h
+    ScanJob.h
     models/DirTreeModel.cpp
     models/DirTreeModel.h
     models/FileTableModel.cpp
@@ -50,6 +51,10 @@ target_link_libraries(disktool
         disktool_core
         disktool_warnings
 )
+
+if(WIN32)
+    target_link_libraries(disktool PRIVATE Shell32)
+endif()
 
 if(WIN32 AND TARGET Qt6::EntryPoint)
     target_link_libraries(disktool PRIVATE Qt6::EntryPoint)

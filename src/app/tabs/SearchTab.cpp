@@ -67,7 +67,19 @@ SearchTab::SearchTab(QWidget* parent)
     layout->addLayout(pathRow);
 
     m_includeHidden = new QCheckBox(tr("Включая скрытые (dot-файлы)"), this);
-    layout->addWidget(m_includeHidden);
+    m_includeHidden->setChecked(false);
+
+    m_useMft = new QCheckBox(tr("Быстрый поиск MFT (нужен Администратор)"),
+                             this);
+    m_useMft->setChecked(false);
+    m_useMft->setToolTip(tr("Читает таблицу MFT напрямую. Требуются права "
+                            "Администратора и файловая система NTFS."));
+
+    auto* optionsRow = new QHBoxLayout;
+    optionsRow->addWidget(m_includeHidden);
+    optionsRow->addWidget(m_useMft);
+    optionsRow->addStretch(1);
+    layout->addLayout(optionsRow);
 
     m_model = new FileTableModel(this);
 
@@ -108,8 +120,20 @@ SearchTab::SearchTab(QWidget* parent)
             startScan();
         }
     });
-    connect(&m_watcher, &QFutureWatcher<disktool::core::ScanResult>::finished,
+    connect(&m_watcher, &QFutureWatcher<disktool::app::ScanJobResult>::finished,
             this, &SearchTab::onScanFinished);
+    connect(m_useMft, &QCheckBox::clicked, this, [this](bool checked) {
+        if (!checked || m_isAdmin) {
+            return;
+        }
+
+        QMessageBox::information(
+            this, tr("Быстрый поиск MFT"),
+            tr("Требуются права Администратора. Запустите DiscTool от имени "
+               "администратора."));
+        // Keep the checkbox checked: the scan will attempt MFT, report the
+        // access error and fall back to the regular scanner automatically.
+    });
 }
 
 SearchTab::~SearchTab()
@@ -118,6 +142,19 @@ SearchTab::~SearchTab()
     if (m_watcher.isRunning()) {
         m_watcher.waitForFinished();
     }
+}
+
+void SearchTab::setAdminPrivileges(bool isAdmin)
+{
+    m_isAdmin = isAdmin;
+
+    if (m_isAdmin) {
+        m_useMft->setToolTip(tr("Читает таблицу MFT напрямую. Требуются права "
+                                "Администратора и файловая система NTFS."));
+        return;
+    }
+
+    m_useMft->setToolTip(tr("Требуются права Администратора."));
 }
 
 void SearchTab::browseForDirectory()
@@ -154,6 +191,8 @@ void SearchTab::startScan()
     m_lastErrors.clear();
     m_model->clearEntries();
 
+    const bool useMft = m_useMft->isChecked();
+
     emit scanStarted();
 
     disktool::core::ScanOptions options;
@@ -164,12 +203,21 @@ void SearchTab::startScan()
                           static_cast<qulonglong>(dirs));
     };
 
+    disktool::core::MftScanOptions mftOptions;
+    mftOptions.cancelToken = &m_cancelFlag;
+    mftOptions.onProgress = [this](std::uintmax_t files, std::uintmax_t dirs) {
+        emit scanProgress(static_cast<qulonglong>(files),
+                          static_cast<qulonglong>(dirs));
+    };
+
     setScanning(true);
 
     const auto root = toPath(text);
     auto future = QtConcurrent::run(
-        [options = std::move(options), root] {
-            return disktool::core::Scanner(options).scan(root);
+        [options = std::move(options), mftOptions = std::move(mftOptions),
+         root, useMft]() mutable {
+            return disktool::app::runScanJob(
+                root, std::move(options), useMft, std::move(mftOptions));
         });
     m_watcher.setFuture(future);
 }
@@ -187,9 +235,9 @@ void SearchTab::cancelScan()
 
 void SearchTab::onScanFinished()
 {
-    disktool::core::ScanResult result;
+    disktool::app::ScanJobResult outcome;
     try {
-        result = m_watcher.result();
+        outcome = m_watcher.result();
     } catch (const std::exception& exception) {
         setScanning(false);
         m_lastErrors = {std::string("scan failed: ") + exception.what()};
@@ -202,6 +250,36 @@ void SearchTab::onScanFinished()
         return;
     }
 
+    if (outcome.mftFailed) {
+        setScanning(false);
+        m_model->clearEntries();
+
+        if (outcome.cancelled) {
+            m_lastErrors = {outcome.mftError.empty() ? "cancelled by user"
+                                                     : outcome.mftError};
+            emit scanFinished(
+                0, 0, 0,
+                static_cast<qlonglong>(outcome.scan.duration.count()),
+                static_cast<int>(m_lastErrors.size()), true);
+            return;
+        }
+
+        // MFT is only an optimisation: warn, disable the option and restart
+        // with the regular std::filesystem scanner.
+        m_useMft->setChecked(false);
+        const QString detail = outcome.mftError.empty()
+            ? tr("неизвестная ошибка")
+            : errorToString(outcome.mftError);
+        QMessageBox::warning(
+            this, tr("Быстрый поиск MFT"),
+            tr("Не удалось прочитать MFT:\n%1\n\n"
+               "Переключаюсь на обычный поиск...")
+                .arg(detail));
+        startScan();
+        return;
+    }
+
+    auto result = std::move(outcome.scan);
     m_lastErrors = result.errors;
     m_model->setEntries(std::move(result.entries));
     setScanning(false);
@@ -225,6 +303,7 @@ void SearchTab::setScanning(bool scanning)
     m_pathEdit->setEnabled(!scanning);
     m_browseButton->setEnabled(!scanning);
     m_includeHidden->setEnabled(!scanning);
+    m_useMft->setEnabled(!scanning);
     m_scanButton->setEnabled(true);
     m_scanButton->setText(scanning ? tr("Отменить") : tr("Сканировать"));
 }

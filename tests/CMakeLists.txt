@@ -24,6 +24,7 @@ add_executable(disktool_tests
     tree_builder_tests.cpp
     treemap_tests.cpp
     cleanup_tests.cpp
+    mft_scanner_tests.cpp
 )
 
 target_link_libraries(disktool_tests

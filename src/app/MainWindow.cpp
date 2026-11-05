@@ -14,6 +14,17 @@
 #include <QTabWidget>
 #include <QWidget>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#include <shlobj.h>
+#endif
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
@@ -29,6 +40,15 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_cleanupTab = new CleanupTab(tabs);
     tabs->addTab(m_cleanupTab, tr("Очистка"));
+
+    // MFT/USN access requires an elevated process. The Search tab keeps its
+    // checkbox visible and explains the requirement when it is clicked.
+#ifdef _WIN32
+    const bool isAdmin = IsUserAnAdmin() != FALSE;
+#else
+    const bool isAdmin = false;
+#endif
+    m_searchTab->setAdminPrivileges(isAdmin);
 
     setCentralWidget(tabs);
 

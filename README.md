@@ -20,7 +20,12 @@
 ## Возможности
 
 - **«Поиск»** — фоновое сканирование папки, фильтры по имени, прогресс и отмена.
-- **«Анализ диска»** — дерево папок с размерами и squarified treemap.
+  Есть опциональный быстрый режим **MFT (USN Journal)**: мгновенное чтение
+  NTFS-тома, требует прав Администратора; при ошибке автоматически
+  переключается на обычный обход. MFT не отдаёт размеры и даты, поэтому в этом
+  режиме они показываются как `0 B` и `—`.
+- **«Анализ диска»** — дерево папок с размерами и squarified treemap
+  (всегда использует обычный сканер, чтобы размеры были точными).
 - **«Очистка»** — поиск пустых файлов и папок с безопасным удалением
   в Корзину Windows (без `std::filesystem::remove`/`remove_all`).
 
@@ -139,6 +144,7 @@ DiscTool/
 ├── include/disktool/core/      # публичный API ядра (без Qt)
 │   ├── version.h
 │   ├── scanner.h
+│   ├── mft_scanner.h
 │   ├── tree_builder.h
 │   ├── treemap.h
 │   └── cleanup.h
@@ -148,6 +154,7 @@ DiscTool/
 │   │   ├── CMakeLists.txt
 │   │   ├── version.cpp
 │   │   ├── scanner.cpp
+│   │   ├── mft_scanner.cpp
 │   │   ├── tree_builder.cpp
 │   │   ├── treemap.cpp
 │   │   └── cleanup.cpp
@@ -160,6 +167,7 @@ DiscTool/
 │       ├── MainWindow.h
 │       ├── MainWindow.cpp
 │       ├── FormatUtils.h
+│       ├── ScanJob.h           # выбор MFT / обычного сканера в фоне
 │       ├── models/
 │       │   ├── DirTreeModel.h
 │       │   ├── DirTreeModel.cpp
@@ -185,6 +193,7 @@ DiscTool/
 └── tests/
     ├── CMakeLists.txt
     ├── scanner_tests.cpp
+    ├── mft_scanner_tests.cpp
     ├── tree_builder_tests.cpp
     ├── treemap_tests.cpp
     └── cleanup_tests.cpp
@@ -202,6 +211,12 @@ squarified treemap (`squarifiedTreemap`).
 Очистка использует ту же иерархию (`findEmptyEntries`): пустые файлы и верхние
 пустые папки удаляются только через `QFile::moveToTrash`, то есть в Корзину
 Windows; `std::filesystem::remove`/`remove_all` в UI не используются.
+
+Быстрый поиск (`MftScanner`) открывает том через `\\.\C:` и перечисляет записи
+USN (`FSCTL_ENUM_USN_DATA`), а полные пути восстанавливает по
+`ParentFileReferenceNumber`. Для не-NTFS, несуществующего диска или процесса
+без прав Администратора возвращается `success = false`, и `SearchTab`
+автоматически повторяет скан обычным `Scanner`.
 
 ## Как внести вклад
 
