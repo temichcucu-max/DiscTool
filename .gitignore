@@ -3,6 +3,9 @@ build/
 out/
 vcpkg_installed/
 
+# Portable release artifacts
+DiscTool-*.zip
+
 # CMake
 CMakeCache.txt
 CMakeFiles/

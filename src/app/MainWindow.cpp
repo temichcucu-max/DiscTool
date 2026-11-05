@@ -6,6 +6,7 @@
 #include "tabs/CleanupTab.h"
 #include "tabs/SearchTab.h"
 
+#include <QIcon>
 #include <QLocale>
 #include <QPushButton>
 #include <QStatusBar>
@@ -16,6 +17,8 @@
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
+    setWindowIcon(QIcon(QStringLiteral(":/icons/app.ico")));
+
     auto* tabs = new QTabWidget(this);
 
     m_searchTab = new SearchTab(tabs);

@@ -1,11 +1,32 @@
 # DiscTool
 
 Мультитул для работы с диском: поиск файлов, анализ занятого места и очистка.
-Сейчас работают вкладки «Поиск» (фоновое сканирование, прогресс, отмена),
-«Анализ диска» (дерево папок и squarified treemap) и «Очистка» (поиск пустых
-файлов и папок с безопасным удалением в Корзину).
 
-## Требования
+## Скачать
+
+Готовый портативный архив — **`DiscTool-0.1.0-win64.zip`** (Windows 10/11 x64).
+Он лежит в корне проекта, а при публикации прикрепляется к разделу **Releases**.
+
+1. Распакуйте архив в любую папку (например, `C:\Tools\DiscTool`).
+2. Запустите `disktool.exe`.
+
+Устанавливать Qt, Visual Studio, CMake или что-либо ещё не нужно: все
+необходимые DLL Qt и плагины (`platforms/`, `imageformats/`, `styles/` и др.)
+уже лежат рядом с исполняемым файлом. Права администратора также не требуются.
+
+> Файл не подписан цифровой подписью, поэтому SmartScreen может показать
+> предупреждение: «Подробнее» → «Выполнить в любом случае».
+
+## Возможности
+
+- **«Поиск»** — фоновое сканирование папки, фильтры по имени, прогресс и отмена.
+- **«Анализ диска»** — дерево папок с размерами и squarified treemap.
+- **«Очистка»** — поиск пустых файлов и папок с безопасным удалением
+  в Корзину Windows (без `std::filesystem::remove`/`remove_all`).
+
+## Сборка из исходников
+
+### Требования
 
 - Windows 10/11 x64
 - Visual Studio 2022 (или новее) с рабочей нагрузкой
@@ -14,6 +35,80 @@
 - Qt **6.5+** (сборка MSVC 2019/2022 64-bit, например `msvc2019_64`)
 
 Qt должен быть собран под MSVC: MinGW-сборки не подходят.
+
+### Настройка Qt
+
+Жёсткого пути к Qt в проекте нет. Самый простой вариант — переменная окружения
+`QT_ROOT` (PowerShell):
+
+```powershell
+$env:QT_ROOT = "C:\Qt\6.7.3\msvc2019_64"
+```
+
+Корневой `CMakeLists.txt` добавит её в `CMAKE_PREFIX_PATH`. Альтернативы:
+
+```powershell
+# через CMAKE_PREFIX_PATH
+cmake --preset windows-msvc-debug -DCMAKE_PREFIX_PATH="C:/Qt/6.7.3/msvc2019_64"
+
+# через Qt6_DIR
+cmake --preset windows-msvc-debug -DQt6_DIR="C:/Qt/6.7.3/msvc2019_64/lib/cmake/Qt6"
+```
+
+Переменную `CMAKE_PREFIX_PATH` CMake читает и из окружения.
+
+### Debug
+
+```powershell
+$env:QT_ROOT = "C:\Qt\6.7.3\msvc2019_64"
+cmake --preset windows-msvc-debug
+cmake --build --preset windows-msvc-debug --config Debug
+```
+
+Готовый бинарник: `build/windows-msvc-debug/bin/Debug/disktool.exe`.
+Для запуска из консоли добавьте `%QT_ROOT%\bin` в `PATH`.
+
+### Release и портативная сборка
+
+```powershell
+$env:QT_ROOT = "C:\Qt\6.7.3\msvc2019_64"
+cmake --preset windows-msvc-release
+cmake --build --preset windows-msvc-release --config Release
+```
+
+После линковки `disktool` автоматический пост-сборочный шаг
+(`src/app/deploy_qt.cmake`) находит `windeployqt.exe` в `$ENV{QT_ROOT}/bin`
+и раскладывает runtime рядом с exe:
+
+```
+windeployqt --release --no-translations --no-system-d3d-compiler --no-opengl-sw
+```
+
+Шаг выполняется только для конфигурации **Release**, поэтому Debug-сборка
+не засоряется release-версиями Qt DLL.
+
+Результат — самодостаточная папка `build/windows-msvc-release/bin/Release/`:
+`disktool.exe`, `Qt6*.dll`, `platforms/qwindows.dll` и остальные плагины.
+Из неё собирается ZIP:
+
+```powershell
+Compress-Archive -Path .\build\windows-msvc-release\bin\Release\* `
+    -DestinationPath .\DiscTool-0.1.0-win64.zip -Force
+```
+
+### Тесты
+
+Тесты используют Catch2 3 (BSL-1.0). Сначала выполняется
+`find_package(Catch2 3 CONFIG QUIET)`; если пакет не найден, Catch2
+скачивается через `FetchContent` (v3.8.1) при конфигурации — нужен доступ
+к GitHub.
+
+```powershell
+cmake --build --preset windows-msvc-debug
+ctest --test-dir build/windows-msvc-debug -C Debug --output-on-failure
+```
+
+Для Release — то же с `windows-msvc-release -C Release`.
 
 ## Проверенная среда
 
@@ -27,118 +122,98 @@ Qt должен быть собран под MSVC: MinGW-сборки не по�
 
 Пакетов `msvc2022_64` в системе нет. Qt собирается MSVC 2019, но ABI
 совместим с более новыми MSVC (v14x), поэтому связка работает. Генератор
-пресета не фиксирован: CMake выбирает установленную версию Visual Studio
-(здесь — Visual Studio 18 2026).
+пресета не фиксирован: CMake выбирает установленную версию Visual Studio.
 
-## Тесты
-
-Тесты используют Catch2 3 (BSL-1.0). Сначала выполняется
-`find_package(Catch2 3 CONFIG QUIET)`; если пакет не найден, Catch2
-скачивается через `FetchContent` (v3.8.1) при конфигурации — нужен доступ
-к GitHub.
-
-```powershell
-cmake --build --preset windows-msvc-debug
-ctest --test-dir build/windows-msvc-debug --output-on-failure
-```
-
-Для многоконфигурационного генератора Visual Studio можно явно указать
-конфигурацию: `ctest --test-dir build/windows-msvc-debug -C Debug --output-on-failure`.
-
-
-## Настройка Qt
-
-Жёсткого пути к Qt в проекте нет. CMake найдёт Qt, если указать его одним из
-способов:
-
-1. Переменная окружения `QT_ROOT` (самый простой вариант для PowerShell):
-
-   ```powershell
-   $env:QT_ROOT = "C:\Qt\6.7.3\msvc2019_64"
-   ```
-
-   Корневой `CMakeLists.txt` добавит её в `CMAKE_PREFIX_PATH`.
-
-2. Через `CMAKE_PREFIX_PATH`:
-
-   ```powershell
-   cmake --preset windows-msvc-debug -DCMAKE_PREFIX_PATH="C:/Qt/6.7.3/msvc2019_64"
-   ```
-
-3. Через `Qt6_DIR`:
-
-   ```powershell
-   cmake --preset windows-msvc-debug -DQt6_DIR="C:/Qt/6.7.3/msvc2019_64/lib/cmake/Qt6"
-   ```
-
-4. Переменная окружения `CMAKE_PREFIX_PATH` — CMake читает её сам.
-
-## Сборка
-
-Пресеты: `windows-msvc-debug` и `windows-msvc-release`. Генератор — Visual
-Studio по умолчанию (подхватывается установленная версия); архитектура x64.
-
-```powershell
-# Конфигурация
-cmake --preset windows-msvc-debug
-
-# Сборка
-cmake --build --preset windows-msvc-debug
-
-# Release
-cmake --preset windows-msvc-release
-cmake --build --preset windows-msvc-release
-```
-
-Готовый бинарник:
-
-```text
-build/windows-msvc-debug/bin/Debug/disktool.exe
-build/windows-msvc-release/bin/Release/disktool.exe
-```
-
-## Запуск
-
-При запуске из проводника или консоли Windows должна находить DLL Qt. Есть
-два варианта:
-
-```powershell
-# 1. Добавить bin Qt в PATH на время сессии
-$env:PATH = "C:\Qt\6.7.3\msvc2019_64\bin;$env:PATH"
-.\build\windows-msvc-debug\bin\Debug\disktool.exe
-
-# 2. Разложить зависимости рядом с exe (для передачи/проверки)
-& "C:\Qt\6.7.3\msvc2019_64\bin\windeployqt.exe" --debug `
-    .\build\windows-msvc-debug\bin\Debug\disktool.exe
-```
-
-Qt линкуется **динамически**; статическая сборка Qt не поддерживается, так как
-проект распространяется под MIT и использует Qt по LGPL-3.0.
-
-## Структура
+## Структура проекта
 
 ```text
 DiscTool/
-├── CMakeLists.txt
-├── CMakePresets.json
-├── vcpkg.json              # пустой манифест на будущее
-├── include/disktool/core/  # version.h, scanner.h, tree_builder.h, treemap.h, cleanup.h
-├── src/core/               # disktool_core — статическая библиотека без Qt
-├── src/app/                # disktool — Qt Widgets (tabs/, models/, widgets/)
-├── resources/              # .qrc (пока пустой)
-└── tests/                  # тесты Catch2 для core
+├── CMakeLists.txt              # корневая конфигурация, поиск Qt, тесты
+├── CMakePresets.json           # пресеты Debug/Release (MSVC x64)
+├── README.md
+├── LICENSE                     # MIT для собственного кода
+├── THIRD_PARTY_NOTICES.md      # лицензии сторонних компонентов
+├── vcpkg.json                  # пустой манифест на будущее
+├── DiscTool-0.1.0-win64.zip    # готовый портативный архив
+│
+├── include/disktool/core/      # публичный API ядра (без Qt)
+│   ├── version.h
+│   ├── scanner.h
+│   ├── tree_builder.h
+│   ├── treemap.h
+│   └── cleanup.h
+│
+├── src/
+│   ├── core/                   # disktool_core — статическая библиотека без Qt
+│   │   ├── CMakeLists.txt
+│   │   ├── version.cpp
+│   │   ├── scanner.cpp
+│   │   ├── tree_builder.cpp
+│   │   ├── treemap.cpp
+│   │   └── cleanup.cpp
+│   │
+│   └── app/                    # disktool — Qt Widgets
+│       ├── CMakeLists.txt      # сборка exe, иконка, windeployqt POST_BUILD
+│       ├── deploy_qt.cmake     # запуск windeployqt для Release
+│       ├── disktool.rc.in      # шаблон .rc с иконкой exe
+│       ├── main.cpp
+│       ├── MainWindow.h
+│       ├── MainWindow.cpp
+│       ├── FormatUtils.h
+│       ├── models/
+│       │   ├── DirTreeModel.h
+│       │   ├── DirTreeModel.cpp
+│       │   ├── FileTableModel.h
+│       │   └── FileTableModel.cpp
+│       ├── tabs/
+│       │   ├── SearchTab.h
+│       │   ├── SearchTab.cpp
+│       │   ├── AnalysisTab.h
+│       │   ├── AnalysisTab.cpp
+│       │   ├── CleanupTab.h
+│       │   └── CleanupTab.cpp
+│       └── widgets/
+│           ├── TreemapWidget.h
+│           └── TreemapWidget.cpp
+│
+├── resources/
+│   ├── resources.qrc           # иконки в Qt-ресурсах
+│   ├── app.svg                 # исходная иконка
+│   ├── app.png                 # растровая версия для окна
+│   └── app.ico                 # иконка exe/окна (16–256 px)
+│
+└── tests/
+    ├── CMakeLists.txt
+    ├── scanner_tests.cpp
+    ├── tree_builder_tests.cpp
+    ├── treemap_tests.cpp
+    └── cleanup_tests.cpp
 ```
 
 `disktool_core` не зависит от Qt — это чистое C++-ядро (сканер файлов,
-построение дерева папок и раскладка treemap), которое используется приложением
-и тестами.
-Сканер синхронный, без внутренних потоков; UI запускает его через QtConcurrent, а отмена работает через `cancelToken`.
+построение дерева папок, раскладка treemap и поиск пустых записей), которое
+используется приложением и тестами. Сканер синхронный, без внутренних потоков;
+UI запускает его через `QtConcurrent`, а отмена работает через `cancelToken`.
+
 Анализ диска строит иерархию из плоского `ScanResult` (`buildTree`), сортирует
 папки по суммарному размеру (`sortBySizeDescending`) и вычисляет прямоугольники
 squarified treemap (`squarifiedTreemap`).
+
 Очистка использует ту же иерархию (`findEmptyEntries`): пустые файлы и верхние
 пустые папки удаляются только через `QFile::moveToTrash`, то есть в Корзину
 Windows; `std::filesystem::remove`/`remove_all` в UI не используются.
+
+## Как внести вклад
+
+1. Сделайте форк и отдельную ветку под изменение.
+2. Соберите Debug и прогоните `ctest` — все тесты должны быть зелёными.
+3. Держите `disktool_core` свободным от Qt и добавляйте тесты Catch2 на каждую
+   новую функцию ядра.
+4. Удаление пользовательских файлов — только через Корзину
+   (`QFile::moveToTrash`); не добавляйте прямые `remove`/`remove_all`.
+5. Не добавляйте новых сторонних зависимостей без обсуждения: проект
+   распространяется под MIT, Qt используется динамически по LGPL-3.0.
+6. Оформляйте PR с кратким описанием изменения и способа проверки.
 
 ## Лицензия
 
