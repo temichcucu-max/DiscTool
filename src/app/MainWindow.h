@@ -4,6 +4,7 @@
 
 class QPushButton;
 class SearchTab;
+class AnalysisTab;
 
 class MainWindow final : public QMainWindow
 {
@@ -18,5 +19,7 @@ private:
                            qlonglong durationMs, int errorCount, bool cancelled);
 
     SearchTab* m_searchTab = nullptr;
+    AnalysisTab* m_analysisTab = nullptr;
+    QWidget* m_errorSource = nullptr;
     QPushButton* m_errorsButton = nullptr;
 };

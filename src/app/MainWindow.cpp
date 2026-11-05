@@ -2,6 +2,7 @@
 
 #include "FormatUtils.h"
 #include "disktool/core/version.h"
+#include "tabs/AnalysisTab.h"
 #include "tabs/SearchTab.h"
 
 #include <QLabel>
@@ -20,14 +21,12 @@ MainWindow::MainWindow(QWidget* parent)
     m_searchTab = new SearchTab(tabs);
     tabs->addTab(m_searchTab, tr("Поиск"));
 
-    const auto addPlaceholder = [this, tabs](const QString& title) {
-        auto* label = new QLabel(tr("Раздел в разработке"), tabs);
-        label->setAlignment(Qt::AlignCenter);
-        tabs->addTab(label, title);
-    };
+    m_analysisTab = new AnalysisTab(tabs);
+    tabs->addTab(m_analysisTab, tr("Анализ диска"));
 
-    addPlaceholder(tr("Анализ диска"));
-    addPlaceholder(tr("Очистка"));
+    auto* cleaningPlaceholder = new QLabel(tr("Раздел в разработке"), tabs);
+    cleaningPlaceholder->setAlignment(Qt::AlignCenter);
+    tabs->addTab(cleaningPlaceholder, tr("Очистка"));
 
     setCentralWidget(tabs);
 
@@ -37,15 +36,33 @@ MainWindow::MainWindow(QWidget* parent)
     m_errorsButton->hide();
     statusBar()->addPermanentWidget(m_errorsButton);
 
-    connect(m_errorsButton, &QPushButton::clicked,
-            m_searchTab, &SearchTab::showErrorsDialog);
-    connect(m_searchTab, &SearchTab::scanStarted, this, [this] {
+    connect(m_errorsButton, &QPushButton::clicked, this, [this] {
+        if (m_errorSource == m_analysisTab) {
+            m_analysisTab->showErrorsDialog();
+        } else if (m_errorSource == m_searchTab) {
+            m_searchTab->showErrorsDialog();
+        }
+    });
+
+    const auto beginScan = [this](QWidget* source) {
+        m_errorSource = source;
         m_errorsButton->hide();
         statusBar()->showMessage(tr("Сканирование..."));
-    });
+    };
+
+    connect(m_searchTab, &SearchTab::scanStarted, this,
+            [this, beginScan] { beginScan(m_searchTab); });
+    connect(m_analysisTab, &AnalysisTab::scanStarted, this,
+            [this, beginScan] { beginScan(m_analysisTab); });
+
     connect(m_searchTab, &SearchTab::scanProgress,
             this, &MainWindow::updateScanProgress);
+    connect(m_analysisTab, &AnalysisTab::scanProgress,
+            this, &MainWindow::updateScanProgress);
+
     connect(m_searchTab, &SearchTab::scanFinished,
+            this, &MainWindow::updateScanSummary);
+    connect(m_analysisTab, &AnalysisTab::scanFinished,
             this, &MainWindow::updateScanSummary);
 
     // Version comes from the core library, proving app <-> core linkage.

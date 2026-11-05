@@ -9,10 +9,16 @@ add_executable(disktool
     MainWindow.cpp
     MainWindow.h
     FormatUtils.h
+    models/DirTreeModel.cpp
+    models/DirTreeModel.h
     models/FileTableModel.cpp
     models/FileTableModel.h
+    tabs/AnalysisTab.cpp
+    tabs/AnalysisTab.h
     tabs/SearchTab.cpp
     tabs/SearchTab.h
+    widgets/TreemapWidget.cpp
+    widgets/TreemapWidget.h
     ${PROJECT_SOURCE_DIR}/resources/resources.qrc
 )
 

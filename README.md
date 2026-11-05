@@ -1,8 +1,9 @@
 # DiscTool
 
 Мультитул для работы с диском: поиск файлов, анализ занятого места и очистка.
-Проект находится в ранней стадии: сейчас реализован только каркас и пустое
-окно с вкладками-заглушками.
+Сейчас работают вкладки «Поиск» (фоновое сканирование, прогресс, отмена) и
+«Анализ диска» (дерево папок и squarified treemap). Раздел «Очистка» пока
+остаётся заглушкой.
 
 ## Требования
 
@@ -121,16 +122,20 @@ DiscTool/
 ├── CMakeLists.txt
 ├── CMakePresets.json
 ├── vcpkg.json              # пустой манифест на будущее
-├── include/disktool/core/  # публичные заголовки core (version.h, scanner.h)
+├── include/disktool/core/  # version.h, scanner.h, tree_builder.h, treemap.h
 ├── src/core/               # disktool_core — статическая библиотека без Qt
-├── src/app/                # disktool — Qt Widgets (tabs/, models/)
+├── src/app/                # disktool — Qt Widgets (tabs/, models/, widgets/)
 ├── resources/              # .qrc (пока пустой)
 └── tests/                  # тесты Catch2 для core
 ```
 
-`disktool_core` не зависит от Qt — это чистое C++-ядро (сканер файлов),
-которое используется приложением и тестами.
+`disktool_core` не зависит от Qt — это чистое C++-ядро (сканер файлов,
+построение дерева папок и раскладка treemap), которое используется приложением
+и тестами.
 Сканер синхронный, без внутренних потоков; UI запускает его через QtConcurrent, а отмена работает через `cancelToken`.
+Анализ диска строит иерархию из плоского `ScanResult` (`buildTree`), сортирует
+папки по суммарному размеру (`sortBySizeDescending`) и вычисляет прямоугольники
+squarified treemap (`squarifiedTreemap`).
 
 ## Лицензия
 
