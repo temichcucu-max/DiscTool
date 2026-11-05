@@ -15,6 +15,8 @@ add_executable(disktool
     models/FileTableModel.h
     tabs/AnalysisTab.cpp
     tabs/AnalysisTab.h
+    tabs/CleanupTab.cpp
+    tabs/CleanupTab.h
     tabs/SearchTab.cpp
     tabs/SearchTab.h
     widgets/TreemapWidget.cpp

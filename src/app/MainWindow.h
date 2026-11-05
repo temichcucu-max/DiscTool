@@ -5,6 +5,7 @@
 class QPushButton;
 class SearchTab;
 class AnalysisTab;
+class CleanupTab;
 
 class MainWindow final : public QMainWindow
 {
@@ -20,6 +21,7 @@ private:
 
     SearchTab* m_searchTab = nullptr;
     AnalysisTab* m_analysisTab = nullptr;
+    CleanupTab* m_cleanupTab = nullptr;
     QWidget* m_errorSource = nullptr;
     QPushButton* m_errorsButton = nullptr;
 };

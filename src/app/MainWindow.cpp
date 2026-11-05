@@ -3,9 +3,9 @@
 #include "FormatUtils.h"
 #include "disktool/core/version.h"
 #include "tabs/AnalysisTab.h"
+#include "tabs/CleanupTab.h"
 #include "tabs/SearchTab.h"
 
-#include <QLabel>
 #include <QLocale>
 #include <QPushButton>
 #include <QStatusBar>
@@ -24,9 +24,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_analysisTab = new AnalysisTab(tabs);
     tabs->addTab(m_analysisTab, tr("Анализ диска"));
 
-    auto* cleaningPlaceholder = new QLabel(tr("Раздел в разработке"), tabs);
-    cleaningPlaceholder->setAlignment(Qt::AlignCenter);
-    tabs->addTab(cleaningPlaceholder, tr("Очистка"));
+    m_cleanupTab = new CleanupTab(tabs);
+    tabs->addTab(m_cleanupTab, tr("Очистка"));
 
     setCentralWidget(tabs);
 
@@ -41,6 +40,8 @@ MainWindow::MainWindow(QWidget* parent)
             m_analysisTab->showErrorsDialog();
         } else if (m_errorSource == m_searchTab) {
             m_searchTab->showErrorsDialog();
+        } else if (m_errorSource == m_cleanupTab) {
+            m_cleanupTab->showErrorsDialog();
         }
     });
 
@@ -54,15 +55,21 @@ MainWindow::MainWindow(QWidget* parent)
             [this, beginScan] { beginScan(m_searchTab); });
     connect(m_analysisTab, &AnalysisTab::scanStarted, this,
             [this, beginScan] { beginScan(m_analysisTab); });
+    connect(m_cleanupTab, &CleanupTab::scanStarted, this,
+            [this, beginScan] { beginScan(m_cleanupTab); });
 
     connect(m_searchTab, &SearchTab::scanProgress,
             this, &MainWindow::updateScanProgress);
     connect(m_analysisTab, &AnalysisTab::scanProgress,
             this, &MainWindow::updateScanProgress);
+    connect(m_cleanupTab, &CleanupTab::scanProgress,
+            this, &MainWindow::updateScanProgress);
 
     connect(m_searchTab, &SearchTab::scanFinished,
             this, &MainWindow::updateScanSummary);
     connect(m_analysisTab, &AnalysisTab::scanFinished,
+            this, &MainWindow::updateScanSummary);
+    connect(m_cleanupTab, &CleanupTab::scanFinished,
             this, &MainWindow::updateScanSummary);
 
     // Version comes from the core library, proving app <-> core linkage.

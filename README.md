@@ -1,9 +1,9 @@
 # DiscTool
 
 Мультитул для работы с диском: поиск файлов, анализ занятого места и очистка.
-Сейчас работают вкладки «Поиск» (фоновое сканирование, прогресс, отмена) и
-«Анализ диска» (дерево папок и squarified treemap). Раздел «Очистка» пока
-остаётся заглушкой.
+Сейчас работают вкладки «Поиск» (фоновое сканирование, прогресс, отмена),
+«Анализ диска» (дерево папок и squarified treemap) и «Очистка» (поиск пустых
+файлов и папок с безопасным удалением в Корзину).
 
 ## Требования
 
@@ -122,7 +122,7 @@ DiscTool/
 ├── CMakeLists.txt
 ├── CMakePresets.json
 ├── vcpkg.json              # пустой манифест на будущее
-├── include/disktool/core/  # version.h, scanner.h, tree_builder.h, treemap.h
+├── include/disktool/core/  # version.h, scanner.h, tree_builder.h, treemap.h, cleanup.h
 ├── src/core/               # disktool_core — статическая библиотека без Qt
 ├── src/app/                # disktool — Qt Widgets (tabs/, models/, widgets/)
 ├── resources/              # .qrc (пока пустой)
@@ -136,6 +136,9 @@ DiscTool/
 Анализ диска строит иерархию из плоского `ScanResult` (`buildTree`), сортирует
 папки по суммарному размеру (`sortBySizeDescending`) и вычисляет прямоугольники
 squarified treemap (`squarifiedTreemap`).
+Очистка использует ту же иерархию (`findEmptyEntries`): пустые файлы и верхние
+пустые папки удаляются только через `QFile::moveToTrash`, то есть в Корзину
+Windows; `std::filesystem::remove`/`remove_all` в UI не используются.
 
 ## Лицензия
 

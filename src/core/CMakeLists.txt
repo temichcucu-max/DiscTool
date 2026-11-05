@@ -3,6 +3,7 @@ add_library(disktool_core STATIC
     scanner.cpp
     tree_builder.cpp
     treemap.cpp
+    cleanup.cpp
 )
 
 target_include_directories(disktool_core
