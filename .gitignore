@@ -1,0 +1,38 @@
+# Build output
+build/
+out/
+vcpkg_installed/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CMakeUserPresets.json
+
+# Visual Studio
+.vs/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.user
+*.suo
+*.aps
+*.opendb
+*.db
+*.ipch
+*.ncb
+*.sdf
+*.opensdf
+
+# Qt
+*.qmlc
+*.jsc
+qmlcache/
+
+# Misc
+*.log
+Thumbs.db
+desktop.ini
