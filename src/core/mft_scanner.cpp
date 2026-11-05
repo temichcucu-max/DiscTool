@@ -442,6 +442,22 @@ MftScanResult scanVolumeWindows(const fs::path& rootDrive,
         const std::wstring rootText = normalizedRootText(absolute);
         result.entries.reserve(nodes.size());
 
+        std::vector<FileEntry> batch;
+        if (options.onBatch) {
+            batch.reserve(1000);
+        }
+        const auto flushBatch = [&options, &batch] {
+            if (batch.empty() || !options.onBatch) {
+                return;
+            }
+            try {
+                options.onBatch(batch);
+            } catch (...) {
+                // A batch callback must never break the scan.
+            }
+            batch.clear();
+        };
+
         std::uintmax_t visited = 0;
         for (const auto& [reference, node] : nodes) {
             if ((visited & 0x3FF) == 0 && isCancelled(options)) {
@@ -464,9 +480,17 @@ MftScanResult scanVolumeWindows(const fs::path& rootDrive,
             entry.path = fs::path(std::move(fullPath));
             entry.isDirectory = (node.attributes & FILE_ATTRIBUTE_DIRECTORY)
                 != 0;
+
+            if (options.onBatch) {
+                batch.push_back(entry);
+                if (batch.size() >= 1000) {
+                    flushBatch();
+                }
+            }
             result.entries.push_back(std::move(entry));
         }
 
+        flushBatch();
         notifyProgress(options, files, dirs);
         result.success = true;
     } catch (const std::exception& exception) {

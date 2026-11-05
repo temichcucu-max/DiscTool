@@ -1,5 +1,6 @@
 #pragma once
 
+#include "TrashWorker.h"
 #include "disktool/core/cleanup.h"
 #include "disktool/core/scanner.h"
 
@@ -15,6 +16,7 @@
 class QCheckBox;
 class QLabel;
 class QLineEdit;
+class QProgressBar;
 class QPushButton;
 class QStandardItemModel;
 class QTableView;
@@ -56,6 +58,9 @@ private:
     [[nodiscard]] std::vector<int> checkedRows() const;
 
     void deleteSelected();
+    void cancelTrash();
+    void onTrashFinished();
+    void setDeleting(bool deleting);
 
     QLineEdit* m_pathEdit = nullptr;
     QPushButton* m_browseButton = nullptr;
@@ -66,8 +71,12 @@ private:
     QStandardItemModel* m_model = nullptr;
     QLabel* m_summary = nullptr;
     QPushButton* m_deleteButton = nullptr;
+    QProgressBar* m_progressBar = nullptr;
+    QPushButton* m_cancelTrashButton = nullptr;
 
     QFutureWatcher<disktool::core::ScanResult> m_watcher;
+    QFutureWatcher<TrashResult> m_trashWatcher;
+    TrashWorker* m_trashWorker = nullptr;
     std::atomic_bool m_cancelFlag{false};
     std::vector<std::string> m_lastErrors;
     std::filesystem::path m_rootPath;

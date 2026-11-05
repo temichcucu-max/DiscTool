@@ -76,6 +76,13 @@ void TreemapWidget::setCurrent(const disktool::core::DirNode* node)
     update();
 }
 
+void TreemapWidget::refresh()
+{
+    m_layoutCurrent = nullptr;
+    m_lastHover = -1;
+    update();
+}
+
 QSize TreemapWidget::minimumSizeHint() const
 {
     return QSize(100, 100);

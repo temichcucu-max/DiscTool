@@ -21,6 +21,10 @@ public:
     void setCurrent(const disktool::core::DirNode* node);
     [[nodiscard]] const disktool::core::DirNode* current() const { return m_current; }
 
+    /// Recomputes the treemap layout from the current node. Used while a scan
+    /// is appending directories/sizes incrementally.
+    void refresh();
+
     [[nodiscard]] QSize minimumSizeHint() const override;
 
 signals:

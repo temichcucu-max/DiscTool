@@ -20,6 +20,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSplitter>
+#include <QTimer>
 #include <QTreeView>
 #include <QVBoxLayout>
 
@@ -142,6 +143,10 @@ AnalysisTab::AnalysisTab(QWidget* parent)
     connect(m_treemap, &TreemapWidget::itemActivated,
             this, &AnalysisTab::activateTreemapItem);
     connect(m_upButton, &QPushButton::clicked, this, &AnalysisTab::goUp);
+
+    m_batchTimer.setInterval(100);
+    connect(&m_batchTimer, &QTimer::timeout,
+            this, &AnalysisTab::flushPendingBatch);
 }
 
 AnalysisTab::~AnalysisTab()
@@ -184,13 +189,27 @@ void AnalysisTab::startScan()
 
     m_cancelFlag.store(false);
     m_lastErrors.clear();
+    {
+        std::lock_guard<std::mutex> lock(m_batchMutex);
+        m_incomingBatch.clear();
+    }
+    m_acceptBatches = true;
+    m_batchTimer.start();
     m_rootPath = toPath(text);
     m_currentNode = nullptr;
 
-    m_model->setRoot(nullptr);
+    disktool::core::ScanResult initial;
+    m_model->setRoot(disktool::core::buildTree(initial, m_rootPath));
     m_treemap->setCurrent(nullptr);
     updateBreadcrumb(nullptr);
     m_upButton->setEnabled(false);
+
+    const QModelIndex initialRoot = m_model->index(0, 0, QModelIndex());
+    if (initialRoot.isValid()) {
+        m_tree->setCurrentIndex(initialRoot);
+        m_tree->expand(initialRoot);
+        showNode(initialRoot);
+    }
 
     emit scanStarted();
 
@@ -199,6 +218,9 @@ void AnalysisTab::startScan()
     options.onProgress = [this](std::uintmax_t files, std::uintmax_t dirs) {
         emit scanProgress(static_cast<qulonglong>(files),
                           static_cast<qulonglong>(dirs));
+    };
+    options.onBatch = [this](const std::vector<disktool::core::FileEntry>& batch) {
+        queueBatch(batch);
     };
 
     setScanning(true);
@@ -224,6 +246,10 @@ void AnalysisTab::cancelScan()
 
 void AnalysisTab::onScanFinished()
 {
+    m_batchTimer.stop();
+    flushPendingBatch();
+    m_acceptBatches = false;
+
     disktool::core::ScanResult result;
     try {
         result = m_watcher.result();
@@ -280,6 +306,46 @@ void AnalysisTab::setScanning(bool scanning)
     m_browseButton->setEnabled(!scanning);
     m_scanButton->setEnabled(true);
     m_scanButton->setText(scanning ? tr("Отменить") : tr("Сканировать"));
+}
+
+void AnalysisTab::appendBatch(
+    const std::vector<disktool::core::FileEntry>& entries)
+{
+    if (!m_acceptBatches) {
+        return;
+    }
+
+    m_model->appendEntries(entries);
+    if (m_currentNode != nullptr) {
+        m_treemap->refresh();
+    }
+}
+
+void AnalysisTab::queueBatch(
+    const std::vector<disktool::core::FileEntry>& entries)
+{
+    if (entries.empty()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_batchMutex);
+    m_incomingBatch.insert(m_incomingBatch.end(), entries.begin(),
+                           entries.end());
+}
+
+void AnalysisTab::flushPendingBatch()
+{
+    std::vector<disktool::core::FileEntry> batch;
+    {
+        std::lock_guard<std::mutex> lock(m_batchMutex);
+        batch.swap(m_incomingBatch);
+    }
+
+    if (!m_acceptBatches || batch.empty()) {
+        return;
+    }
+
+    appendBatch(batch);
 }
 
 void AnalysisTab::onCurrentIndexChanged(const QModelIndex& current,

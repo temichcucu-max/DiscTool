@@ -50,6 +50,12 @@ struct ScanOptions {
     /// files/dirs are the counters accumulated so far. May be nullptr.
     /// Must not throw; exceptions are swallowed by the scanner.
     std::function<void(std::uintmax_t files, std::uintmax_t dirs)> onProgress;
+
+    /// Called from the scanner thread with up to 1000 newly found entries at a
+    /// time (and once more for the final partial batch). The callback runs
+    /// before ScanResult::entries is returned, which lets the UI show results
+    /// while the scan is still running. May be nullptr. Must not throw.
+    std::function<void(const std::vector<FileEntry>&)> onBatch;
 };
 
 struct ScanResult {

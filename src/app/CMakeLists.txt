@@ -12,6 +12,8 @@ add_executable(disktool
     ScanJob.h
     Theme.cpp
     Theme.h
+    TrashWorker.cpp
+    TrashWorker.h
     models/DirTreeModel.cpp
     models/DirTreeModel.h
     models/FileTableModel.cpp
@@ -44,6 +46,16 @@ if(WIN32)
     )
     target_sources(disktool PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/disktool.rc")
     set_target_properties(disktool PROPERTIES WIN32_EXECUTABLE TRUE)
+
+    # UAC: the MFT/USN scanner needs an elevated volume handle. Qt 6.8+ reads
+    # QT_WINDOWS_APP_PROJECT_EXECUTION_LEVEL; the MSVC linker flag enforces the
+    # same manifest entry for Qt 6.5-6.7 as well.
+    set_target_properties(disktool PROPERTIES
+        QT_WINDOWS_APP_PROJECT_EXECUTION_LEVEL "requireAdministrator")
+    if(MSVC)
+        target_link_options(disktool PRIVATE
+            "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'")
+    endif()
 endif()
 
 target_link_libraries(disktool
@@ -55,7 +67,7 @@ target_link_libraries(disktool
 )
 
 if(WIN32)
-    target_link_libraries(disktool PRIVATE Shell32)
+    target_link_libraries(disktool PRIVATE Shell32 Ole32 Uuid)
 endif()
 
 if(WIN32 AND TARGET Qt6::EntryPoint)

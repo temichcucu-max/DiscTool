@@ -30,7 +30,10 @@ public:
                         int role = Qt::DisplayRole) const override;
 
     void setEntries(std::vector<disktool::core::FileEntry> entries);
+    void appendEntries(const std::vector<disktool::core::FileEntry>& entries);
     void clearEntries();
+
+    [[nodiscard]] const disktool::core::FileEntry* entryAt(int row) const;
 
 private:
     std::vector<disktool::core::FileEntry> m_entries;

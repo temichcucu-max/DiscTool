@@ -51,6 +51,22 @@ ScanResult Scanner::scan(const fs::path& root) const
         }
     };
 
+    std::vector<FileEntry> batch;
+    if (m_options.onBatch) {
+        batch.reserve(1000);
+    }
+    const auto flushBatch = [this, &batch] {
+        if (batch.empty() || !m_options.onBatch) {
+            return;
+        }
+        try {
+            m_options.onBatch(batch);
+        } catch (...) {
+            // A batch callback must never break the scan.
+        }
+        batch.clear();
+    };
+
     const auto finish = [&result, started, &notifyProgress] {
         result.duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - started);
@@ -206,6 +222,13 @@ ScanResult Scanner::scan(const fs::path& root) const
 
             result.entries.push_back(std::move(entry));
 
+            if (m_options.onBatch) {
+                batch.push_back(result.entries.back());
+                if (batch.size() >= 1000) {
+                    flushBatch();
+                }
+            }
+
             ++processed;
             if (processed % 1000 == 0) {
                 notifyProgress();
@@ -232,6 +255,7 @@ ScanResult Scanner::scan(const fs::path& root) const
         result.errors.push_back(toUtf8(root) + ": cancelled by user");
     }
 
+    flushBatch();
     finish();
     return result;
 }

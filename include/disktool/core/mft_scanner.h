@@ -33,6 +33,10 @@ struct MftScanOptions {
     /// Counters cover the whole volume, not only the requested subtree, and
     /// are therefore an upper bound for the final result.
     std::function<void(std::uintmax_t files, std::uintmax_t dirs)> onProgress;
+
+    /// Called from the scanner thread with up to 1000 entries after paths have
+    /// been reconstructed and filtered. May be nullptr. Must not throw.
+    std::function<void(const std::vector<FileEntry>&)> onBatch;
 };
 
 /// Fast NTFS reader based on the USN change journal (FSCTL_ENUM_USN_DATA).

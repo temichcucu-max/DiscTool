@@ -7,7 +7,10 @@
 #include <QString>
 
 #include <cstddef>
+#include <string>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -23,6 +26,12 @@ QString pathToQString(const fs::path& path)
 QString nameToQString(const std::string& name)
 {
     return QString::fromUtf8(name.data(), static_cast<qsizetype>(name.size()));
+}
+
+std::string pathToUtf8(const fs::path& path)
+{
+    const auto text = path.u8string();
+    return std::string(reinterpret_cast<const char*>(text.data()), text.size());
 }
 
 }  // namespace
@@ -86,7 +95,8 @@ QModelIndex DirTreeModel::parent(const QModelIndex& child) const
         return {};
     }
 
-    return createIndex(rowIt->second, 0, const_cast<disktool::core::DirNode*>(parentNode));
+    return createIndex(rowIt->second, 0,
+                       const_cast<disktool::core::DirNode*>(parentNode));
 }
 
 int DirTreeModel::rowCount(const QModelIndex& parent) const
@@ -219,6 +229,124 @@ void DirTreeModel::setRoot(std::unique_ptr<disktool::core::DirNode> root)
     endResetModel();
 }
 
+void DirTreeModel::appendEntries(
+    const std::vector<disktool::core::FileEntry>& entries)
+{
+    if (!m_root || entries.empty()) {
+        return;
+    }
+
+    std::unordered_set<const disktool::core::DirNode*> changed;
+
+    for (const auto& entry : entries) {
+        const auto relative = entry.path.lexically_relative(m_root->path);
+        if (relative.empty() || relative.is_absolute()) {
+            continue;
+        }
+
+        const fs::path dot = ".";
+        const fs::path dotdot = "..";
+
+        std::vector<fs::path> components;
+        bool escapesRoot = false;
+        for (const auto& component : relative) {
+            if (component == dot) {
+                continue;
+            }
+            if (component == dotdot) {
+                escapesRoot = true;
+                break;
+            }
+            components.push_back(component);
+        }
+
+        if (escapesRoot || components.empty()) {
+            continue;
+        }
+
+        const std::size_t directoryCount = entry.isDirectory
+            ? components.size()
+            : components.size() - 1;
+
+        std::vector<disktool::core::DirNode*> chain;
+        chain.reserve(directoryCount + 1);
+        chain.push_back(m_root.get());
+
+        auto* current = m_root.get();
+        fs::path currentPath = m_root->path;
+
+        for (std::size_t position = 0; position < directoryCount; ++position) {
+            currentPath /= components[position];
+            const std::string name = pathToUtf8(components[position]);
+            current = findOrCreateChild(*current, name, currentPath, changed);
+            chain.push_back(current);
+        }
+
+        if (entry.isDirectory) {
+            continue;
+        }
+
+        // Files themselves are not rows in this tree: their size and count
+        // belong to the containing directory and to every ancestor.
+        auto* containingDirectory = chain.back();
+        containingDirectory->ownSize += entry.size;
+        ++containingDirectory->ownFileCount;
+
+        for (auto* node : chain) {
+            node->cumulativeSize += entry.size;
+            ++node->cumulativeFileCount;
+            changed.insert(node);
+        }
+    }
+
+    emitChanged(changed);
+}
+
+disktool::core::DirNode* DirTreeModel::findOrCreateChild(
+    disktool::core::DirNode& parent, const std::string& name,
+    const fs::path& fullPath,
+    std::unordered_set<const disktool::core::DirNode*>& changed)
+{
+    auto& byName = m_childIndex[&parent];
+    const auto found = byName.find(name);
+    if (found != byName.end()) {
+        return parent.children[found->second].get();
+    }
+
+    const QModelIndex parentIndex = indexForNode(&parent, 0);
+    const int row = static_cast<int>(parent.children.size());
+
+    beginInsertRows(parentIndex, row, row);
+
+    auto child = std::make_unique<disktool::core::DirNode>();
+    child->path = fullPath;
+    child->name = name;
+    child->isDirectory = true;
+
+    auto* raw = child.get();
+    parent.children.push_back(std::move(child));
+    m_parents[raw] = &parent;
+    m_rows[raw] = row;
+    byName.emplace(name, static_cast<std::size_t>(row));
+
+    endInsertRows();
+
+    changed.insert(&parent);
+    return raw;
+}
+
+void DirTreeModel::emitChanged(
+    const std::unordered_set<const disktool::core::DirNode*>& changed)
+{
+    for (const auto* node : changed) {
+        const QModelIndex first = indexForNode(node, NameColumn);
+        const QModelIndex last = indexForNode(node, ColumnCount - 1);
+        if (first.isValid() && last.isValid()) {
+            emit dataChanged(first, last);
+        }
+    }
+}
+
 const disktool::core::DirNode* DirTreeModel::nodeFromIndex(
     const QModelIndex& index) const
 {
@@ -254,6 +382,7 @@ void DirTreeModel::rebuildIndex()
 {
     m_parents.clear();
     m_rows.clear();
+    m_childIndex.clear();
 
     if (m_root) {
         indexNode(*m_root, nullptr, 0);
@@ -266,7 +395,9 @@ void DirTreeModel::indexNode(const disktool::core::DirNode& node,
     m_parents[&node] = parent;
     m_rows[&node] = row;
 
+    auto& byName = m_childIndex[&node];
     for (std::size_t position = 0; position < node.children.size(); ++position) {
+        byName[node.children[position]->name] = position;
         indexNode(*node.children[position], &node, static_cast<int>(position));
     }
 }

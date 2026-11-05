@@ -5,11 +5,13 @@
 
 #include <QFutureWatcher>
 #include <QModelIndex>
+#include <QTimer>
 #include <QWidget>
 
 #include <atomic>
 #include <cstddef>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -49,6 +51,10 @@ private:
     void goUp();
     void activateTreemapItem(std::size_t index);
 
+    void appendBatch(const std::vector<disktool::core::FileEntry>& entries);
+    void queueBatch(const std::vector<disktool::core::FileEntry>& entries);
+    void flushPendingBatch();
+
     QLineEdit* m_pathEdit = nullptr;
     QPushButton* m_browseButton = nullptr;
     QPushButton* m_scanButton = nullptr;
@@ -63,4 +69,8 @@ private:
     std::vector<std::string> m_lastErrors;
     std::filesystem::path m_rootPath;
     const disktool::core::DirNode* m_currentNode = nullptr;
+    std::mutex m_batchMutex;
+    std::vector<disktool::core::FileEntry> m_incomingBatch;
+    QTimer m_batchTimer;
+    bool m_acceptBatches = false;
 };

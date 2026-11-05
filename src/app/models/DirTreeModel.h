@@ -5,8 +5,12 @@
 #include <QAbstractItemModel>
 #include <QFileIconProvider>
 
+#include <cstddef>
 #include <memory>
+#include <string>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 class DirTreeModel final : public QAbstractItemModel
 {
@@ -37,6 +41,14 @@ public:
     /// row so that it can be selected in the view.
     void setRoot(std::unique_ptr<disktool::core::DirNode> root);
 
+    /// Merges a scan batch into the current tree. New directories are inserted
+    /// with beginInsertRows/endInsertRows; sizes and file counts of existing
+    /// nodes are updated and reported with dataChanged. Used for live updates
+    /// while AnalysisTab scans; the final tree is rebuilt and sorted when the
+    /// scan finishes.
+    void appendEntries(
+        const std::vector<disktool::core::FileEntry>& entries);
+
     [[nodiscard]] const disktool::core::DirNode* root() const { return m_root.get(); }
 
     [[nodiscard]] const disktool::core::DirNode* nodeFromIndex(
@@ -48,11 +60,20 @@ private:
     void rebuildIndex();
     void indexNode(const disktool::core::DirNode& node,
                    const disktool::core::DirNode* parent, int row);
+    disktool::core::DirNode* findOrCreateChild(
+        disktool::core::DirNode& parent, const std::string& name,
+        const std::filesystem::path& fullPath,
+        std::unordered_set<const disktool::core::DirNode*>& changed);
+    void emitChanged(
+        const std::unordered_set<const disktool::core::DirNode*>& changed);
 
     std::unique_ptr<disktool::core::DirNode> m_root;
     std::unordered_map<const disktool::core::DirNode*,
                        const disktool::core::DirNode*>
         m_parents;
     std::unordered_map<const disktool::core::DirNode*, int> m_rows;
+    std::unordered_map<const disktool::core::DirNode*,
+                       std::unordered_map<std::string, std::size_t>>
+        m_childIndex;
     QFileIconProvider m_iconProvider;
 };

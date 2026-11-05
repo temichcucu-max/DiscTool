@@ -175,6 +175,28 @@ void FileTableModel::setEntries(std::vector<disktool::core::FileEntry> entries)
     endResetModel();
 }
 
+void FileTableModel::appendEntries(
+    const std::vector<disktool::core::FileEntry>& entries)
+{
+    if (entries.empty()) {
+        return;
+    }
+
+    const int first = static_cast<int>(m_entries.size());
+    const int last = first + static_cast<int>(entries.size()) - 1;
+    beginInsertRows(QModelIndex(), first, last);
+    m_entries.insert(m_entries.end(), entries.begin(), entries.end());
+    endInsertRows();
+}
+
+const disktool::core::FileEntry* FileTableModel::entryAt(int row) const
+{
+    if (row < 0 || static_cast<std::size_t>(row) >= m_entries.size()) {
+        return nullptr;
+    }
+    return &m_entries[static_cast<std::size_t>(row)];
+}
+
 void FileTableModel::clearEntries()
 {
     setEntries({});

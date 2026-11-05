@@ -9,7 +9,6 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
-#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -18,7 +17,9 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QProgressBar>
 #include <QPushButton>
+#include <QSet>
 #include <QStandardItem>
 #include <QStandardItemModel>
 #include <QTableView>
@@ -26,8 +27,6 @@
 
 #include <algorithm>
 #include <exception>
-#include <functional>
-#include <iterator>
 #include <utility>
 #include <vector>
 
@@ -55,12 +54,6 @@ QString errorToString(const std::string& message)
 {
     return QString::fromUtf8(message.data(),
                              static_cast<qsizetype>(message.size()));
-}
-
-std::size_t pathDepth(const fs::path& path)
-{
-    return static_cast<std::size_t>(
-        std::distance(path.begin(), path.end()));
 }
 
 }  // namespace
@@ -122,6 +115,18 @@ CleanupTab::CleanupTab(QWidget* parent)
 
     layout->addWidget(m_table, 1);
 
+    auto* trashRow = new QHBoxLayout;
+    m_progressBar = new QProgressBar(this);
+    m_progressBar->setVisible(false);
+    m_progressBar->setTextVisible(true);
+
+    m_cancelTrashButton = new QPushButton(tr("Отменить"), this);
+    m_cancelTrashButton->setVisible(false);
+
+    trashRow->addWidget(m_progressBar, 1);
+    trashRow->addWidget(m_cancelTrashButton);
+    layout->addLayout(trashRow);
+
     auto* footer = new QHBoxLayout;
     m_summary = new QLabel(this);
     m_deleteButton = new QPushButton(tr("Удалить выбранное (в Корзину)"), this);
@@ -147,14 +152,32 @@ CleanupTab::CleanupTab(QWidget* parent)
     connect(m_deleteButton, &QPushButton::clicked,
             this, &CleanupTab::deleteSelected);
 
+    m_trashWorker = new TrashWorker(this);
+    connect(m_trashWorker, &TrashWorker::progress, this,
+            [this](int processed, int total) {
+                m_progressBar->setRange(0, total);
+                m_progressBar->setValue(processed);
+            },
+            Qt::QueuedConnection);
+    connect(&m_trashWatcher, &QFutureWatcher<TrashResult>::finished,
+            this, &CleanupTab::onTrashFinished);
+    connect(m_cancelTrashButton, &QPushButton::clicked,
+            this, &CleanupTab::cancelTrash);
+
     updateSummary();
 }
 
 CleanupTab::~CleanupTab()
 {
     m_cancelFlag.store(true);
+    if (m_trashWorker != nullptr) {
+        m_trashWorker->requestAbort();
+    }
     if (m_watcher.isRunning()) {
         m_watcher.waitForFinished();
+    }
+    if (m_trashWatcher.isRunning()) {
+        m_trashWatcher.waitForFinished();
     }
 }
 
@@ -369,8 +392,9 @@ void CleanupTab::updateSummary()
 
 void CleanupTab::updateDeleteButton()
 {
-    m_deleteButton->setEnabled(
-        !m_watcher.isRunning() && !checkedRows().empty());
+    m_deleteButton->setEnabled(!m_watcher.isRunning()
+                               && !m_trashWatcher.isRunning()
+                               && !checkedRows().empty());
 }
 
 std::vector<int> CleanupTab::checkedRows() const
@@ -412,66 +436,107 @@ void CleanupTab::deleteSelected()
         return;
     }
 
-    struct Pending {
-        int row = 0;
-        disktool::core::CleanupItem item;
-    };
-
-    std::vector<Pending> pending;
-    pending.reserve(rows.size());
+    std::vector<fs::path> paths;
+    paths.reserve(rows.size());
     for (const int row : rows) {
-        pending.push_back(Pending{row, m_items[static_cast<std::size_t>(row)]});
+        paths.push_back(m_items[static_cast<std::size_t>(row)].path);
     }
 
-    // Files first. Directories are deleted deepest-first as a defensive
-    // measure; the core normally returns only topmost empty directories, so
-    // nested paths are already covered by their parent.
-    std::stable_sort(pending.begin(), pending.end(),
-                     [](const Pending& left, const Pending& right) {
-                         if (left.item.isDirectory != right.item.isDirectory) {
-                             return !left.item.isDirectory;
-                         }
-                         if (left.item.isDirectory) {
-                             return pathDepth(left.item.path)
-                                 > pathDepth(right.item.path);
-                         }
-                         return false;
-                     });
+    setDeleting(true);
+    m_progressBar->setRange(0, static_cast<int>(paths.size()));
+    m_progressBar->setValue(0);
+    m_trashWorker->resetAbort();
 
-    m_deleteButton->setEnabled(false);
+    auto future = QtConcurrent::run(
+        [worker = m_trashWorker, paths = std::move(paths)] {
+            return worker->run(paths);
+        });
+    m_trashWatcher.setFuture(future);
+}
 
-    int moved = 0;
-    QStringList failures;
-    std::vector<int> removedRows;
-    removedRows.reserve(pending.size());
+void CleanupTab::cancelTrash()
+{
+    if (!m_trashWatcher.isRunning()) {
+        return;
+    }
 
-    for (const auto& entry : pending) {
-        const QString path = pathToQString(entry.item.path);
-        if (QFile::moveToTrash(path)) {
-            ++moved;
-            removedRows.push_back(entry.row);
-        } else {
-            failures.append(path);
+    m_trashWorker->requestAbort();
+    m_cancelTrashButton->setEnabled(false);
+    m_summary->setText(tr("Отмена удаления..."));
+}
+
+void CleanupTab::onTrashFinished()
+{
+    TrashResult result;
+    try {
+        result = m_trashWatcher.result();
+    } catch (const std::exception& exception) {
+        result.failures.append(QString::fromUtf8(exception.what()));
+    } catch (...) {
+        result.failures.append(tr("неизвестная ошибка удаления"));
+    }
+
+    setDeleting(false);
+
+    QSet<QString> succeeded;
+    succeeded.reserve(static_cast<qsizetype>(result.succeeded.size()));
+    for (const QString& path : result.succeeded) {
+        succeeded.insert(path.toLower());
+    }
+
+    for (int row = static_cast<int>(m_items.size()) - 1; row >= 0; --row) {
+        const QString path =
+            pathToQString(m_items[static_cast<std::size_t>(row)].path);
+        if (succeeded.contains(path.toLower())) {
+            m_model->removeRow(row);
+            m_items.erase(m_items.begin() + row);
         }
-    }
-
-    std::sort(removedRows.begin(), removedRows.end(), std::greater<int>());
-    for (const int row : removedRows) {
-        m_model->removeRow(row);
-        m_items.erase(m_items.begin() + row);
     }
 
     updateSummary();
     updateDeleteButton();
 
-    QString message = tr("Отправлено в Корзину: %1.").arg(moved);
-    if (!failures.isEmpty()) {
+    QString message = tr("Отправлено в Корзину: %1.").arg(result.moved);
+    if (result.cancelled) {
         message += QLatin1Char('\n');
-        message += tr("Не удалось переместить: %1.").arg(failures.size());
+        message += tr("Удаление отменено. Необработанные элементы остались "
+                      "в списке.");
+    }
+    if (!result.failures.isEmpty()) {
         message += QLatin1Char('\n');
-        message += failures.join(QLatin1Char('\n'));
+        message += tr("Не удалось переместить: %1.").arg(result.failures.size());
+
+        constexpr int kShownFailures = 50;
+        const int shown = std::min(
+            static_cast<int>(result.failures.size()), kShownFailures);
+        for (int index = 0; index < shown; ++index) {
+            message += QLatin1Char('\n');
+            message += result.failures.at(index);
+        }
+        if (result.failures.size() > shown) {
+            message += QLatin1Char('\n');
+            message += tr("… и ещё %1").arg(result.failures.size() - shown);
+        }
     }
     QMessageBox::information(this, tr("Очистка"), message);
+}
+
+void CleanupTab::setDeleting(bool deleting)
+{
+    m_pathEdit->setEnabled(!deleting);
+    m_browseButton->setEnabled(!deleting);
+    m_scanButton->setEnabled(!deleting);
+    m_findFiles->setEnabled(!deleting);
+    m_findDirectories->setEnabled(!deleting);
+    m_progressBar->setVisible(deleting);
+    m_cancelTrashButton->setVisible(deleting);
+    m_cancelTrashButton->setEnabled(deleting);
+
+    if (deleting) {
+        m_deleteButton->setEnabled(false);
+    } else {
+        updateDeleteButton();
+    }
 }
 
 void CleanupTab::showErrorsDialog()
