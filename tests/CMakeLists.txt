@@ -30,4 +30,4 @@ target_link_libraries(disktool_tests
         Catch2::Catch2WithMain
 )
 
-catch_discover_tests(disktool_tests)
+catch_discover_tests(disktool_tests PROPERTIES TIMEOUT 30)

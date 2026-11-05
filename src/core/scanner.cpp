@@ -44,6 +44,31 @@ ScanResult Scanner::scan(const fs::path& root) const
             std::chrono::steady_clock::now() - started);
     };
 
+    std::error_code rootError;
+    const auto rootStatus = fs::status(root, rootError);
+    if (rootError) {
+        result.errors.push_back(errorMessage(root, rootError));
+        finish();
+        return result;
+    }
+
+    if (rootStatus.type() == fs::file_type::not_found) {
+        result.errors.push_back(toUtf8(root) + ": no such file or directory");
+        finish();
+        return result;
+    }
+
+    if (!fs::is_directory(rootStatus)) {
+        result.errors.push_back(toUtf8(root) + ": not a directory");
+        finish();
+        return result;
+    }
+
+    if (m_options.maxDepth == 0) {
+        finish();
+        return result;
+    }
+
     auto directoryOptions = fs::directory_options::skip_permission_denied;
     if (m_options.followSymlinks) {
         directoryOptions |= fs::directory_options::follow_directory_symlink;
@@ -57,9 +82,14 @@ ScanResult Scanner::scan(const fs::path& root) const
         return result;
     }
 
-    if (m_options.maxDepth == 0) {
-        finish();
-        return result;
+    // Canonical paths of directories we have entered. Only needed while
+    // following links; std::filesystem::equivalent also resolves junctions
+    // and other reparse points.
+    std::vector<fs::path> visitedDirectories;
+    if (m_options.followSymlinks && m_options.detectSymlinkCycles) {
+        std::error_code canonicalError;
+        const auto canonicalRoot = fs::canonical(root, canonicalError);
+        visitedDirectories.push_back(canonicalError ? root : canonicalRoot);
     }
 
     const fs::recursive_directory_iterator end;
@@ -100,6 +130,33 @@ ScanResult Scanner::scan(const fs::path& root) const
                     break;
                 }
                 continue;
+            }
+
+            if (isDirectory && depth < m_options.maxDepth
+                && m_options.followSymlinks && m_options.detectSymlinkCycles) {
+                bool cycle = false;
+                for (const auto& visited : visitedDirectories) {
+                    std::error_code equivalentError;
+                    if (fs::equivalent(current, visited, equivalentError)
+                        && !equivalentError) {
+                        cycle = true;
+                        break;
+                    }
+                }
+
+                if (cycle) {
+                    result.errors.push_back(toUtf8(current)
+                        + ": directory cycle detected");
+                    it.disable_recursion_pending();
+                    if (!advance(current)) {
+                        break;
+                    }
+                    continue;
+                }
+
+                std::error_code canonicalError;
+                const auto canonical = fs::canonical(current, canonicalError);
+                visitedDirectories.push_back(canonicalError ? current : canonical);
             }
 
             FileEntry entry;

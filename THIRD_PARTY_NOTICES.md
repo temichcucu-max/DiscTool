@@ -32,8 +32,9 @@ GPL, AGPL, LGPL (other than Qt), and proprietary SDKs are not permitted.
 - **Repository:** <https://github.com/catchorg/Catch2>
 - **License text in project:** not bundled; see
   <https://github.com/catchorg/Catch2/blob/v3.8.1/LICENSE.txt>
-- **Used by:** `tests/` only. Fetched at configure time via `FetchContent` when
-  no local Catch2 3 package is found.
+- **Used by:** `tests/` only. It is not linked into `disktool.exe` or any
+  release binary. Fetched at configure time via `FetchContent` when no local
+  Catch2 3 package is found.
 
 <!--
 Entry template — copy this block for each new dependency:

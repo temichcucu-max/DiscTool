@@ -22,6 +22,13 @@ struct ScanOptions {
     /// hang the scanner.
     bool followSymlinks = false;
 
+    /// Detect directory cycles while following links (symlinks, junctions,
+    /// other reparse points). Every directory is compared with already visited
+    /// ones via std::filesystem::equivalent; a repeat is reported in
+    /// ScanResult::errors and is not descended into. Only has an effect when
+    /// followSymlinks is true.
+    bool detectSymlinkCycles = true;
+
     /// Include names starting with '.'. This is the only hidden-file heuristic
     /// available with plain std::filesystem; Windows hidden attributes are not
     /// inspected.
@@ -44,7 +51,8 @@ struct ScanResult {
 
 /// Synchronous recursive directory scanner built on std::filesystem.
 /// It never throws for filesystem failures: problems are reported in
-/// ScanResult::errors instead.
+/// ScanResult::errors instead. If root is not a directory, the result is empty
+/// and contains a single "not a directory" error.
 class Scanner {
 public:
     explicit Scanner(ScanOptions options = {});
